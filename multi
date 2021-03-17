@@ -1,0 +1,138 @@
+#!/bin/bash
+
+VERSION="1.1.0"
+
+SELF_NAME="$0"
+SELF_NAME="${SELF_NAME#\.}"
+SELF_NAME="${SELF_NAME##/*/}"
+SELF_NAME="${SELF_NAME#/}"
+SELF_NAME="${SELF_NAME%.sh}"
+
+# Execute this script with 'bash -x SCRIPT' to activate debugging
+if [ ${-/*x*/x} == 'x' ]; then
+    PS4='+ ${BASH_SOURCE[0]}:${LINENO} ${FUNCNAME[0]}() |err=$?| \$ '
+fi
+set -e  # Fail on first error
+
+function _version()
+{
+    echo "${SELF_NAME} v${VERSION}"
+}
+
+function _help()
+{
+    cat <<EOF
+Execute a COMMAND in each FOLDERs.
+
+Usage:
+    ${SELF_NAME} FOLDER [FOLDER ...] -- COMMAND
+
+
+OPTIONS:
+    -v, --version   Display version.
+    -h, --help      Display this help.
+
+    --              Mandatory. Separate the FOLDERs from the COMMAND.
+
+EXAMPLE:
+    ${SELF_NAME} booxi-* -- git status
+
+LIMITATION:
+This script has a limitation: the COMMAND must be one command ; you can't
+execute many commands by using the '|' or ';' separator like in a shell.
+To execute many commands you may be more served by 'bash-mosh'
+(https://github.com/bimlas/bash-mosh)
+
+EOF
+}
+
+function _main()
+{
+    FOLDERS=()
+    local folder_sep_found=0
+
+        args=$(getopt --options hv --longoptions help,version --name "${SELF_NAME}" -- "$@")
+        if [ $? -ne 0 ]; then
+            >&2 echo "Error: Invalid options"
+            exit 2
+        fi
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        -v|--version)
+            _version
+            exit 0
+        ;;
+        -h|--help)
+            _help
+            exit 0
+        ;;
+        --)
+            folder_sep_found=1
+            shift
+            break
+            ;;
+        *)
+            FOLDERS+=("$1")
+            shift
+            ;;
+        esac
+    done
+
+    COMMAND=( "$@" )
+    #declare -p FOLDERS
+    #declare -p COMMAND
+
+    #
+    # Manage mandatory options
+    #
+    # '--' should be used and at least one folder should be given.
+    if [ $folder_sep_found -eq 0 ]; then
+        >&2 echo "Error: You have to separate FOLDERs and COMMAND by using ' -- ' !"
+        exit 2
+    elif [ ${#FOLDERS[@]} -eq 0 ]; then
+        >&2 echo "Error: You have to specify at least one FOLDER !"
+        exit 2
+    fi
+
+    #
+    # Manage existence of given folders
+    #
+    local folder
+    for folder in "${FOLDERS[@]}"; do
+        if [ ! -e "${folder}" ]; then
+            >&2 echo "Error: '${folder}' was not found !"
+            exit 2
+        elif [ ! -d "${folder}" ]; then
+            >&2 echo "Error: '${folder}' is not a folder !"
+            exit 2
+        fi
+    done
+
+    do_execution_of_command
+}
+
+function do_execution_of_command()
+{
+    local sep_char='*'
+    local sep_line_length=78
+
+    local folder
+    local sep_line
+
+    for folder in "${FOLDERS[@]}"; do
+        >&2 echo ""
+        length=$(( ${sep_line_length} - 1 - ${#folder} ))
+        printf -v sep_line "%${length}s"    # |sep_line| now contains only spaces.
+        sep_line=${sep_line// /${sep_char}} # Replace all spaces in |sep_line| with character |sep_char|
+
+        >&2 echo "${folder} ${sep_line}" # Display a nice delimiter line, beginning with the folder name.
+        (
+            cd "${folder}"
+            "${COMMAND[@]}"
+        )
+    done
+
+}
+
+_main "$@"
