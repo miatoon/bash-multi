@@ -81,18 +81,18 @@ function _main()
     done
 
     COMMAND=( "$@" )
-    #declare -p FOLDERS
-    #declare -p COMMAND
+    # declare -p FOLDERS # DEBUG
+    # declare -p COMMAND # DEBUG
 
     #
     # Manage mandatory options
     #
     # '--' should be used and at least one folder should be given.
     if [ $folder_sep_found -eq 0 ]; then
-        >&2 echo "Error: You have to separate FOLDERs and COMMAND by using ' -- ' !"
+        >&2 echo "Error: You have to separate FOLDERs and COMMAND by using ' -- '"
         exit 2
     elif [ ${#FOLDERS[@]} -eq 0 ]; then
-        >&2 echo "Error: You have to specify at least one FOLDER !"
+        >&2 echo "Error: You have to specify at least one FOLDER"
         exit 2
     fi
 
@@ -102,10 +102,10 @@ function _main()
     local folder
     for folder in "${FOLDERS[@]}"; do
         if [ ! -e "${folder}" ]; then
-            >&2 echo "Error: '${folder}' was not found !"
+            >&2 echo "Error: '${folder}' was not found"
             exit 2
         elif [ ! -d "${folder}" ]; then
-            >&2 echo "Error: '${folder}' is not a folder !"
+            >&2 echo "Error: '${folder}' is not a folder"
             exit 2
         fi
     done
