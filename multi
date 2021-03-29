@@ -1,5 +1,5 @@
 #!/bin/bash
-VERSION="1.2.0"
+VERSION="1.2.1"
 
 # Execute this script with 'bash -x SCRIPT' to activate debugging
 if [ ${-/*x*/x} == 'x' ]; then
@@ -167,7 +167,7 @@ function _execute_command_using_parallel()
     local sep_char='*'
     local sep_line_length=78
 
-    parallel --keep-order "header='[{#}] {} '" \; echo '' \; echo -n "\${header}" \; printf "%.0s${sep_char}" \$\( seq 1 \$\(\(${sep_line_length}-\${#header}\)\) \) \; echo '' \; cd "{}" \; "${COMMAND[@]}" ::: "${FOLDERS[@]}"
+    parallel --keep-order "header='[{#}] {} '" \; echo '' \; echo -n '${header}' \; printf "%.0s${sep_char}" '$( seq 1 $(('${sep_line_length}'-${#header})) )' \; echo '' \; cd "{}" \; "${COMMAND[@]}" ::: "${FOLDERS[@]}"
 }
 
 _main "$@"
