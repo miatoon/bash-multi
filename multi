@@ -1,18 +1,17 @@
 #!/bin/bash
-
-VERSION="1.1.0"
-
-SELF_NAME="$0"
-SELF_NAME="${SELF_NAME#\.}"
-SELF_NAME="${SELF_NAME##/*/}"
-SELF_NAME="${SELF_NAME#/}"
-SELF_NAME="${SELF_NAME%.sh}"
+VERSION="1.2.0"
 
 # Execute this script with 'bash -x SCRIPT' to activate debugging
 if [ ${-/*x*/x} == 'x' ]; then
     PS4='+ ${BASH_SOURCE[0]}:${LINENO} ${FUNCNAME[0]}() |err=$?| \$ '
 fi
 set -e  # Fail on first error
+
+SELF_NAME="$0"
+SELF_NAME="${SELF_NAME#\.}"
+SELF_NAME="${SELF_NAME##/*/}"
+SELF_NAME="${SELF_NAME#/}"
+SELF_NAME="${SELF_NAME%.sh}"
 
 function _version()
 {
@@ -31,18 +30,15 @@ Usage:
 OPTIONS:
     -v, --version   Display version.
     -h, --help      Display this help.
+    -p, --parallel  Use of GNU parallel
 
     --              Mandatory. Separate the FOLDERs from the COMMAND.
 
-EXAMPLE:
-    ${SELF_NAME} booxi-* -- git status
-
-LIMITATION:
-This script has a limitation: the COMMAND must be one command ; you can't
-execute many commands by using the '|' or ';' separator like in a shell.
-To execute many commands you may be more served by 'bash-mosh'
-(https://github.com/bimlas/bash-mosh)
-
+EXAMPLES:
+    ${SELF_NAME} repo*/ -- git status | grep -E '^On branch'
+    ${SELF_NAME} repo*/ -- git fetch --all --tags \; git pull
+    ${SELF_NAME} -p repo*/ -- git status \| grep -E \'^On branch\'
+    ${SELF_NAME} -p repo*/ -- git fetch --all --tags \; git pull
 EOF
 }
 
@@ -51,12 +47,13 @@ function _main()
     FOLDERS=()
     local folder_sep_found=0
 
-        args=$(getopt --options hv --longoptions help,version --name "${SELF_NAME}" -- "$@")
-        if [ $? -ne 0 ]; then
-            >&2 echo "Error: Invalid options"
-            exit 2
-        fi
+    args=$(getopt --options hvp --longoptions help,version,parallel --name "${SELF_NAME}" -- "$@")
+    if [ $? -ne 0 ]; then
+        >&2 echo "Error: Invalid options"
+        exit 2
+    fi
 
+    USE_PARALLEL=0
     while [ $# -gt 0 ]; do
         case "$1" in
         -v|--version)
@@ -67,15 +64,19 @@ function _main()
             _help
             exit 0
         ;;
+        -p|--parallel)
+            USE_PARALLEL=1
+            shift
+        ;;
         --)
             folder_sep_found=1
             shift
             break
-            ;;
+        ;;
         *)
             FOLDERS+=("$1")
             shift
-            ;;
+        ;;
         esac
     done
 
@@ -109,10 +110,32 @@ function _main()
         fi
     done
 
-    do_execution_of_command
+    #
+    # Manage existence of external products
+    #
+    if [[ $USE_PARALLEL == 1 ]]; then
+        which parallel >& /dev/null
+        local errcode=$?
+        if [[ $errcode != 0 ]]; then
+            >&2 echo 'Error: Unable to reach GNU parallel.'
+            >&2 echo '       Did you install it? Is it present in your PATH env variable?'
+            exit 2
+        fi
+    fi
+
+    execute_command
 }
 
-function do_execution_of_command()
+function execute_command()
+{
+    if [[ $USE_PARALLEL == 1 ]]; then
+        _execute_command_using_parallel
+    else
+        _execute_command_simply
+    fi
+}
+
+function _execute_command_simply()
 {
     local sep_char='*'
     local sep_line_length=78
@@ -120,19 +143,31 @@ function do_execution_of_command()
     local folder
     local sep_line
 
-    for folder in "${FOLDERS[@]}"; do
-        >&2 echo ""
-        length=$(( ${sep_line_length} - 1 - ${#folder} ))
+    for (( i=0 ; $i < ${#FOLDERS[@]} ; i++ )); do
+        local folder="${FOLDERS[$i]}"
+        local header="[$((i+1))] ${folder} "
+
+        length=$(( ${sep_line_length} - ${#header} ))
         printf -v sep_line "%${length}s"    # |sep_line| now contains only spaces.
         sep_line=${sep_line// /${sep_char}} # Replace all spaces in |sep_line| with character |sep_char|
 
-        >&2 echo "${folder} ${sep_line}" # Display a nice delimiter line, beginning with the folder name.
+        >&2 echo ""
+        >&2 echo "${header}${sep_line}" # Display a nice delimiter line, beginning with the folder name.
         (
             cd "${folder}"
-            "${COMMAND[@]}"
+            # "${COMMAND[@]}" # WORKS but no color, only 1 command, no piped commands
+            bash -c "${COMMAND[*]}" # WORKS with color, with multiple commands, with piped commands, but be careful with commands containing whitespaces
         )
     done
 
+}
+
+function _execute_command_using_parallel()
+{
+    local sep_char='*'
+    local sep_line_length=78
+
+    parallel --keep-order "header='[{#}] {} '" \; echo '' \; echo -n "\${header}" \; printf "%.0s${sep_char}" \$\( seq 1 \$\(\(${sep_line_length}-\${#header}\)\) \) \; echo '' \; cd "{}" \; "${COMMAND[@]}" ::: "${FOLDERS[@]}"
 }
 
 _main "$@"
