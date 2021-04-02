@@ -1,5 +1,5 @@
 #!/bin/bash
-VERSION="1.2.0"
+VERSION="1.2.2"
 
 # Execute this script with 'bash -x SCRIPT' to activate debugging
 if [ ${-/*x*/x} == 'x' ]; then
@@ -12,6 +12,10 @@ SELF_NAME="${SELF_NAME#\.}"
 SELF_NAME="${SELF_NAME##/*/}"
 SELF_NAME="${SELF_NAME#/}"
 SELF_NAME="${SELF_NAME%.sh}"
+SELF_DIRNAME=$(cd "$(dirname $(type -p "$0"))" ; pwd)
+
+# Includes
+source "${SELF_DIRNAME}/colors.inc"
 
 function _version()
 {
@@ -49,7 +53,7 @@ function _main()
 
     args=$(getopt --options hvp --longoptions help,version,parallel --name "${SELF_NAME}" -- "$@")
     if [ $? -ne 0 ]; then
-        >&2 echo "Error: Invalid options"
+        >&2 echo_color "Error: Invalid options" $COLOR_RED
         exit 2
     fi
 
@@ -81,18 +85,18 @@ function _main()
     done
 
     COMMAND=( "$@" )
-    #declare -p FOLDERS
-    #declare -p COMMAND
+    # declare -p FOLDERS # DEBUG
+    # declare -p COMMAND # DEBUG
 
     #
     # Manage mandatory options
     #
     # '--' should be used and at least one folder should be given.
     if [ $folder_sep_found -eq 0 ]; then
-        >&2 echo "Error: You have to separate FOLDERs and COMMAND by using ' -- ' !"
+        >&2 echo_color "Error: You have to separate FOLDERs and COMMAND by using ' -- '" $COLOR_RED
         exit 2
     elif [ ${#FOLDERS[@]} -eq 0 ]; then
-        >&2 echo "Error: You have to specify at least one FOLDER !"
+        >&2 echo_color "Error: You have to specify at least one FOLDER" $COLOR_RED
         exit 2
     fi
 
@@ -102,10 +106,10 @@ function _main()
     local folder
     for folder in "${FOLDERS[@]}"; do
         if [ ! -e "${folder}" ]; then
-            >&2 echo "Error: '${folder}' was not found !"
+            >&2 echo_color "Error: '${folder}' was not found" $COLOR_RED
             exit 2
         elif [ ! -d "${folder}" ]; then
-            >&2 echo "Error: '${folder}' is not a folder !"
+            >&2 echo_color "Error: '${folder}' is not a folder" $COLOR_RED
             exit 2
         fi
     done
@@ -117,8 +121,8 @@ function _main()
         which parallel >& /dev/null
         local errcode=$?
         if [[ $errcode != 0 ]]; then
-            >&2 echo 'Error: Unable to reach GNU parallel.'
-            >&2 echo '       Did you install it? Is it present in your PATH env variable?'
+            >&2 echo_color 'Error: Unable to reach GNU parallel.' $COLOR_RED
+            >&2 echo_color '       Did you install it? Is it present in your PATH env variable?' $COLOR_RED
             exit 2
         fi
     fi
@@ -152,14 +156,13 @@ function _execute_command_simply()
         sep_line=${sep_line// /${sep_char}} # Replace all spaces in |sep_line| with character |sep_char|
 
         >&2 echo ""
-        >&2 echo "${header}${sep_line}" # Display a nice delimiter line, beginning with the folder name.
+        >&2 echo_color "${header}${sep_line}" $COLOR_CYAN # Display a nice delimiter line, beginning with the folder name.
         (
             cd "${folder}"
             # "${COMMAND[@]}" # WORKS but no color, only 1 command, no piped commands
             bash -c "${COMMAND[*]}" # WORKS with color, with multiple commands, with piped commands, but be careful with commands containing whitespaces
         )
     done
-
 }
 
 function _execute_command_using_parallel()
@@ -167,7 +170,7 @@ function _execute_command_using_parallel()
     local sep_char='*'
     local sep_line_length=78
 
-    parallel --keep-order "header='[{#}] {} '" \; echo '' \; echo -n "\${header}" \; printf "%.0s${sep_char}" \$\( seq 1 \$\(\(${sep_line_length}-\${#header}\)\) \) \; echo '' \; cd "{}" \; "${COMMAND[@]}" ::: "${FOLDERS[@]}"
+    parallel --keep-order "header='[{#}] {} '" \; echo -e '\\e['$COLOR_CYAN'm' \; echo -n '${header}' \; printf "%.0s${sep_char}" '$( seq 1 $(('${sep_line_length}'-${#header})) )' \; echo -e '\\e['$STYLE_NORMAL'm' \; cd "{}" \; "${COMMAND[@]}" ::: "${FOLDERS[@]}"
 }
 
 _main "$@"
