@@ -1,5 +1,5 @@
 #!/bin/bash
-VERSION="1.2.2"
+VERSION="1.2.3"
 
 # Execute this script with 'bash -x SCRIPT' to activate debugging
 if [ ${-/*x*/x} == 'x' ]; then
@@ -16,6 +16,7 @@ SELF_DIRNAME=$(cd "$(dirname $(type -p "$0"))" ; pwd)
 
 # Includes
 source "${SELF_DIRNAME}/colors.inc"
+source "${SELF_DIRNAME}/header.inc"
 
 function _version()
 {
@@ -36,12 +37,12 @@ OPTIONS:
     -h, --help      Display this help.
     -p, --parallel  Use of GNU parallel
 
-    --              Mandatory. Separate the FOLDERs from the COMMAND.
+    --              Mandatory. Separates the FOLDERs from the COMMAND.
 
 EXAMPLES:
-    ${SELF_NAME} repo*/ -- git status | grep -E '^On branch'
-    ${SELF_NAME} repo*/ -- git fetch --all --tags \; git pull
-    ${SELF_NAME} -p repo*/ -- git status \| grep -E \'^On branch\'
+    ${SELF_NAME} repo*/ -- git status \| grep -E \'^On branch\'
+    ${SELF_NAME} repo*/ -- 'git fetch --all --tags ; git pull'
+    ${SELF_NAME} -p repo*/ -- 'git status | grep -E "^On branch"'
     ${SELF_NAME} -p repo*/ -- git fetch --all --tags \; git pull
 EOF
 }
@@ -141,22 +142,15 @@ function execute_command()
 
 function _execute_command_simply()
 {
-    local sep_char='*'
-    local sep_line_length=78
-
-    local folder
-    local sep_line
-
+    local sep_char='-'
     for (( i=0 ; $i < ${#FOLDERS[@]} ; i++ )); do
         local folder="${FOLDERS[$i]}"
-        local header="[$((i+1))] ${folder} "
-
-        length=$(( ${sep_line_length} - ${#header} ))
-        printf -v sep_line "%${length}s"    # |sep_line| now contains only spaces.
-        sep_line=${sep_line// /${sep_char}} # Replace all spaces in |sep_line| with character |sep_char|
+        local header="[$((i+1))] ${folder}"
 
         >&2 echo ""
-        >&2 echo_color "${header}${sep_line}" $COLOR_CYAN # Display a nice delimiter line, beginning with the folder name.
+        # Display a nice delimiter line, beginning with the folder name.
+        >&2 echo_color "$(_header_left "${header}" "${sep_char}")" $COLOR_CYAN
+
         (
             cd "${folder}"
             # "${COMMAND[@]}" # WORKS but no color, only 1 command, no piped commands
@@ -167,10 +161,18 @@ function _execute_command_simply()
 
 function _execute_command_using_parallel()
 {
-    local sep_char='*'
-    local sep_line_length=78
+    local sep_char='-'
+    local padding="$(_header_get_padding "${sep_char}")"
+    local columns=$(tput cols)
+    parallel --keep-order "header='[{#}] {} '" \; echo '' \; echo -ne '\\e['$COLOR_CYAN'm' \; echo -n '"${header}"' \; printf '%*.*s' 0 '$(( '${columns}'-${#header} ))' "${padding}" \; echo -e '\\e['$STYLE_NORMAL'm' \; cd "{}" \; "${COMMAND[@]}" ::: "${FOLDERS[@]}"
 
-    parallel --keep-order "header='[{#}] {} '" \; echo -e '\\e['$COLOR_CYAN'm' \; echo -n '${header}' \; printf "%.0s${sep_char}" '$( seq 1 $(('${sep_line_length}'-${#header})) )' \; echo -e '\\e['$STYLE_NORMAL'm' \; cd "{}" \; "${COMMAND[@]}" ::: "${FOLDERS[@]}"
+    # To use a function declared in the shell session , parallel needs to source its env_parallel
+    # first and to be called with env_parallel. This is working but the sourcing is taking ~1.5s,
+    # which is long when you use the command very often.
+    #
+    # source `which env_parallel.bash` env_parallel --keep-order "header='[{#}] {}'" \; echo "" \;
+    # echo_color -- '"$(_header_left "${header}")"' $COLOR_CYAN \; cd "{}" \; "${COMMAND[@]}" :::
+    # "${FOLDERS[@]}"
 }
 
 _main "$@"
