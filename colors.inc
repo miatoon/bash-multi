@@ -34,6 +34,10 @@ function echo_color()
     local opt=''
     while true; do
         case "$1" in
+        --)
+            shift
+            break
+        ;;
         -*)
             opt+=" $1"
             shift
