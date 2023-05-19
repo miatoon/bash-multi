@@ -34,10 +34,6 @@ function echo_color()
     local opt=''
     while true; do
         case "$1" in
-        --)
-            shift
-            break
-        ;;
         -*)
             opt+=" $1"
             shift
@@ -50,7 +46,7 @@ function echo_color()
 
     local msg=${1} # empty is allowed
     local text_color=${2:-$COLOR_DEFAULT}
-    local text_attribute=${3:-$NORMAL}
+    local text_attribute=${3:-$STYLE_NORMAL}
     local background_color=${4:-$BG_COLOR_DEFAULT}
 
     local combination="${text_attribute};${text_color};${background_color}"
